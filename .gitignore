@@ -9,3 +9,4 @@ __pycache__/
 test/acvp/.acvp-data/
 # Downloaded Wycheproof test data
 test/wycheproof/.wycheproof-data/
+/demoUse
