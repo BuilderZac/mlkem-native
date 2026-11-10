@@ -1,11 +1,37 @@
+#define _GNU_SOURCE
+
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/random.h>
 #include <unistd.h>
 
 #define MLK_CONFIG_PARAMETER_SET 768
 #include "mlkem_native.h"
+
+int randombytes(uint8_t *out, size_t length)
+{
+    size_t offset = 0;
+
+    while (offset < length) {
+        ssize_t count = getrandom(out + offset, length - offset, 0);
+
+        if (count < 0) {
+            if (errno == EINTR)
+                continue;
+            return -1;
+        }
+
+        if (count == 0)
+            return -1;
+
+        offset += (size_t)count;
+    }
+
+    return 0;
+}
 
 static void print_hex(const char *label, const uint8_t *data, size_t length)
 {
@@ -17,8 +43,19 @@ static void print_hex(const char *label, const uint8_t *data, size_t length)
     printf("\n");
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+    int use_static_seed = 0;
+    int result;
+
+    if (argc > 2 || (argc == 2 && strcmp(argv[1], "-s") != 0)) {
+        fprintf(stderr, "Usage: %s [-s]\n", argv[0]);
+        return EXIT_FAILURE;
+    }
+
+    if (argc == 2)
+        use_static_seed = 1;
+
     /* Slight delay before starting. */
     sleep(1);
 
@@ -27,27 +64,40 @@ int main(void)
     uint8_t ciphertext[MLKEM_CIPHERTEXTBYTES(768)];
     uint8_t encapsulated_secret[MLKEM_BYTES];
     uint8_t decapsulated_secret[MLKEM_BYTES];
-    uint8_t keypair_coins[2 * MLKEM_SYMBYTES];
-    uint8_t encapsulation_coins[MLKEM_SYMBYTES];
     size_t i;
-    int result;
 
-    /* Deterministic demo inputs. Use the randomized API in production. */
-    for (i = 0; i < sizeof(keypair_coins); i++)
-        keypair_coins[i] = (uint8_t)i;
+    if (use_static_seed) {
+        uint8_t keypair_coins[2 * MLKEM_SYMBYTES];
+        uint8_t encapsulation_coins[MLKEM_SYMBYTES];
 
-    for (i = 0; i < sizeof(encapsulation_coins); i++)
-        encapsulation_coins[i] = (uint8_t)(0xa0U + i);
+        /* Deterministic demo inputs. Use the randomized API by default. */
+        for (i = 0; i < sizeof(keypair_coins); i++)
+            keypair_coins[i] = (uint8_t)i;
 
-    result = PQCP_MLKEM_NATIVE_MLKEM768_keypair_derand(
-        public_key, secret_key, keypair_coins);
-    if (result != 0) {
-        fprintf(stderr, "Key generation failed: %d\n", result);
-        return EXIT_FAILURE;
+        for (i = 0; i < sizeof(encapsulation_coins); i++)
+            encapsulation_coins[i] = (uint8_t)(0xa0U + i);
+
+        result = PQCP_MLKEM_NATIVE_MLKEM768_keypair_derand(
+            public_key, secret_key, keypair_coins);
+        if (result != 0) {
+            fprintf(stderr, "Key generation failed: %d\n", result);
+            return EXIT_FAILURE;
+        }
+
+        result = PQCP_MLKEM_NATIVE_MLKEM768_enc_derand(
+            ciphertext, encapsulated_secret, public_key, encapsulation_coins);
+    } else {
+        result = PQCP_MLKEM_NATIVE_MLKEM768_keypair(
+            public_key, secret_key);
+        if (result != 0) {
+            fprintf(stderr, "Key generation failed: %d\n", result);
+            return EXIT_FAILURE;
+        }
+
+        result = PQCP_MLKEM_NATIVE_MLKEM768_enc(
+            ciphertext, encapsulated_secret, public_key);
     }
 
-    result = PQCP_MLKEM_NATIVE_MLKEM768_enc_derand(
-        ciphertext, encapsulated_secret, public_key, encapsulation_coins);
     if (result != 0) {
         fprintf(stderr, "Encapsulation failed: %d\n", result);
         return EXIT_FAILURE;

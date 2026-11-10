@@ -13,12 +13,11 @@ cc="${CC:-gcc}"
     -Wextra \
     -Wpedantic \
     -DMLK_CONFIG_PARAMETER_SET=768 \
-    -DMLK_CONFIG_NO_RANDOMIZED_API \
     -I"$project_dir/mlkem" \
     "$project_dir/demoUse.c" \
     "$project_dir/mlkem/mlkem_native.c" \
     "$project_dir/mlkem/mlkem_native_asm.S" \
     -o "$output"
 
-exec "$output"
+exec "$output" "$@"
 
