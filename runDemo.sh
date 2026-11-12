@@ -20,4 +20,3 @@ cc="${CC:-gcc}"
     -o "$output"
 
 exec "$output" "$@"
-
